@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClaimsService } from '../src/modules/claims/claims.service';
 import { PolicyService } from '../src/modules/policy/policy.service';
 import { DaoService } from '../src/modules/dao/dao.service';
@@ -8,10 +9,13 @@ import { ClaimsModule } from '../src/modules/claims/claims.module';
 import { PolicyModule } from '../src/modules/policy/policy.module';
 import { DaoModule } from '../src/modules/dao/dao.module';
 import { NotificationModule } from '../src/modules/notification/notification.module';
+import { Notification } from '../src/modules/notification/notification.entity';
+import { Repository } from 'typeorm';
+import { getRepositoryToken } from '@nestjs/typeorm';
 
 /**
  * Integration tests for the event-driven notification system.
- * Tests verify that business actions emit events and notifications are created.
+ * Tests verify that business actions emit events and notifications are created in the database.
  */
 describe('Notification Events Integration (e2e)', () => {
     let module: TestingModule;
@@ -19,10 +23,24 @@ describe('Notification Events Integration (e2e)', () => {
     let policyService: PolicyService;
     let daoService: DaoService;
     let notificationService: NotificationService;
+    let notificationRepository: Repository<Notification>;
+
+    // Helpers to generate valid UUIDs for testing
+    const TEST_USER_ID = '123e4567-e89b-12d3-a456-426614174000';
+    const TEST_USER_2_ID = '123e4567-e89b-12d3-a456-426614174001';
+    const TEST_CLAIM_ID = '123e4567-e89b-12d3-a456-426614174002';
+    const TEST_POLICY_ID = '123e4567-e89b-12d3-a456-426614174003';
+    const TEST_PROPOSAL_ID = '123e4567-e89b-12d3-a456-426614174004';
 
     beforeAll(async () => {
         module = await Test.createTestingModule({
             imports: [
+                TypeOrmModule.forRoot({
+                    type: 'sqlite',
+                    database: ':memory:',
+                    entities: [Notification],
+                    synchronize: true,
+                }),
                 EventEmitterModule.forRoot(),
                 ClaimsModule,
                 PolicyModule,
@@ -38,40 +56,40 @@ describe('Notification Events Integration (e2e)', () => {
         policyService = module.get<PolicyService>(PolicyService);
         daoService = module.get<DaoService>(DaoService);
         notificationService = module.get<NotificationService>(NotificationService);
+        notificationRepository = module.get<Repository<Notification>>(getRepositoryToken(Notification));
     });
 
     afterAll(async () => {
         await module.close();
     });
 
-    beforeEach(() => {
-        // Clear notifications before each test
-        notificationService.clearAllNotifications();
+    beforeEach(async () => {
+        // Clear notifications from database before each test
+        await notificationRepository.clear();
     });
 
     describe('Claim Events', () => {
-        const userId = 'user-123';
-        const claimId = 'claim-456';
-        const policyId = 'policy-789';
+        it('should create notification when claim is submitted', async () => {
+            claimsService.submitClaim(TEST_CLAIM_ID, TEST_USER_ID, TEST_POLICY_ID);
 
-        it('should create notification when claim is submitted', () => {
-            claimsService.submitClaim(claimId, userId, policyId);
+            // Wait a small bit for event processing
+            await new Promise(resolve => setTimeout(resolve, 100));
 
-            const notifications =
-                notificationService.getNotificationsByUserId(userId);
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('claim');
             expect(notifications[0].title).toBe('Claim Submitted');
-            expect(notifications[0].message).toContain(claimId);
-            expect(notifications[0].read).toBe(false);
+            expect(notifications[0].message).toContain(TEST_CLAIM_ID);
+            expect(notifications[0].isRead).toBe(false);
         });
 
-        it('should create notification when claim is approved', () => {
-            claimsService.approveClaim(claimId, userId);
+        it('should create notification when claim is approved', async () => {
+            claimsService.approveClaim(TEST_CLAIM_ID, TEST_USER_ID);
 
-            const notifications =
-                notificationService.getNotificationsByUserId(userId);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('claim');
@@ -79,13 +97,13 @@ describe('Notification Events Integration (e2e)', () => {
             expect(notifications[0].message).toContain('approved');
         });
 
-        it('should create notification when claim is rejected', () => {
+        it('should create notification when claim is rejected', async () => {
             const reason = 'Insufficient documentation';
+            claimsService.rejectClaim(TEST_CLAIM_ID, TEST_USER_ID, reason);
 
-            claimsService.rejectClaim(claimId, userId, reason);
+            await new Promise(resolve => setTimeout(resolve, 100));
 
-            const notifications =
-                notificationService.getNotificationsByUserId(userId);
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('claim');
@@ -93,13 +111,13 @@ describe('Notification Events Integration (e2e)', () => {
             expect(notifications[0].message).toContain(reason);
         });
 
-        it('should create notification when claim is settled', () => {
+        it('should create notification when claim is settled', async () => {
             const amount = 1500.5;
+            claimsService.settleClaim(TEST_CLAIM_ID, TEST_USER_ID, amount);
 
-            claimsService.settleClaim(claimId, userId, amount);
+            await new Promise(resolve => setTimeout(resolve, 100));
 
-            const notifications =
-                notificationService.getNotificationsByUserId(userId);
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('claim');
@@ -109,37 +127,37 @@ describe('Notification Events Integration (e2e)', () => {
     });
 
     describe('Policy Events', () => {
-        const userId = 'user-456';
-        const policyId = 'policy-123';
+        it('should create notification when policy is issued', async () => {
+            policyService.issuePolicy(TEST_POLICY_ID, TEST_USER_ID);
 
-        it('should create notification when policy is issued', () => {
-            policyService.issuePolicy(policyId, userId);
+            await new Promise(resolve => setTimeout(resolve, 100));
 
-            const notifications =
-                notificationService.getNotificationsByUserId(userId);
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('policy');
             expect(notifications[0].title).toBe('Policy Issued');
-            expect(notifications[0].message).toContain(policyId);
+            expect(notifications[0].message).toContain(TEST_POLICY_ID);
         });
 
-        it('should create notification when policy is renewed', () => {
-            policyService.renewPolicy(policyId, userId);
+        it('should create notification when policy is renewed', async () => {
+            policyService.renewPolicy(TEST_POLICY_ID, TEST_USER_ID);
 
-            const notifications =
-                notificationService.getNotificationsByUserId(userId);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('policy');
             expect(notifications[0].title).toBe('Policy Renewed');
         });
 
-        it('should create notification when policy expires', () => {
-            policyService.expirePolicy(policyId, userId);
+        it('should create notification when policy expires', async () => {
+            policyService.expirePolicy(TEST_POLICY_ID, TEST_USER_ID);
 
-            const notifications =
-                notificationService.getNotificationsByUserId(userId);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('policy');
@@ -147,13 +165,13 @@ describe('Notification Events Integration (e2e)', () => {
             expect(notifications[0].message).toContain('renew');
         });
 
-        it('should create notification when policy is cancelled', () => {
+        it('should create notification when policy is cancelled', async () => {
             const reason = 'Non-payment';
+            policyService.cancelPolicy(TEST_POLICY_ID, TEST_USER_ID, reason);
 
-            policyService.cancelPolicy(policyId, userId, reason);
+            await new Promise(resolve => setTimeout(resolve, 100));
 
-            const notifications =
-                notificationService.getNotificationsByUserId(userId);
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('policy');
@@ -163,15 +181,14 @@ describe('Notification Events Integration (e2e)', () => {
     });
 
     describe('DAO Events', () => {
-        const creatorId = 'user-789';
-        const proposalId = 'proposal-001';
         const title = 'Increase Coverage Limit';
 
-        it('should create notification when DAO proposal is created', () => {
-            daoService.createProposal(proposalId, creatorId, title);
+        it('should create notification when DAO proposal is created', async () => {
+            daoService.createProposal(TEST_PROPOSAL_ID, TEST_USER_ID, title);
 
-            const notifications =
-                notificationService.getNotificationsByUserId(creatorId);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('dao');
@@ -179,11 +196,12 @@ describe('Notification Events Integration (e2e)', () => {
             expect(notifications[0].message).toContain(title);
         });
 
-        it('should create notification when DAO proposal passes', () => {
-            daoService.finalizeProposal(proposalId, creatorId, true);
+        it('should create notification when DAO proposal passes', async () => {
+            daoService.finalizeProposal(TEST_PROPOSAL_ID, TEST_USER_ID, true);
 
-            const notifications =
-                notificationService.getNotificationsByUserId(creatorId);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('dao');
@@ -191,11 +209,12 @@ describe('Notification Events Integration (e2e)', () => {
             expect(notifications[0].message).toContain('passed');
         });
 
-        it('should create notification when DAO proposal does not pass', () => {
-            daoService.finalizeProposal(proposalId, creatorId, false);
+        it('should create notification when DAO proposal does not pass', async () => {
+            daoService.finalizeProposal(TEST_PROPOSAL_ID, TEST_USER_ID, false);
 
-            const notifications =
-                notificationService.getNotificationsByUserId(creatorId);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const { notifications } = await notificationService.findAllByUserId(TEST_USER_ID, { page: 1, limit: 10 });
 
             expect(notifications).toHaveLength(1);
             expect(notifications[0].type).toBe('dao');
@@ -205,17 +224,17 @@ describe('Notification Events Integration (e2e)', () => {
     });
 
     describe('Cross-module isolation', () => {
-        it('should not create notifications for other users', () => {
-            const user1 = 'user-1';
-            const user2 = 'user-2';
+        it('should not create notifications for other users', async () => {
+            const user1 = TEST_USER_ID;
+            const user2 = TEST_USER_2_ID;
 
-            claimsService.submitClaim('claim-1', user1, 'policy-1');
-            policyService.issuePolicy('policy-2', user2);
+            claimsService.submitClaim(TEST_CLAIM_ID, user1, TEST_POLICY_ID);
+            policyService.issuePolicy(TEST_POLICY_ID, user2);
 
-            const user1Notifications =
-                notificationService.getNotificationsByUserId(user1);
-            const user2Notifications =
-                notificationService.getNotificationsByUserId(user2);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const { notifications: user1Notifications } = await notificationService.findAllByUserId(user1, { page: 1, limit: 10 });
+            const { notifications: user2Notifications } = await notificationService.findAllByUserId(user2, { page: 1, limit: 10 });
 
             expect(user1Notifications).toHaveLength(1);
             expect(user1Notifications[0].type).toBe('claim');

@@ -15,7 +15,7 @@ import {
 export class DaoEventListeners {
   private readonly logger = new Logger(DaoEventListeners.name);
 
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(private readonly notificationService: NotificationService) { }
 
   @OnEvent(EventNames.DAO_PROPOSAL_CREATED)
   handleDaoProposalCreated(event: DaoProposalCreatedEvent): void {
@@ -23,12 +23,12 @@ export class DaoEventListeners {
       `Handling dao.proposal.created event for proposal ${event.proposalId}`,
     );
 
-    this.notificationService.createNotification({
-      userId: event.creatorId,
-      type: 'dao',
-      title: 'Proposal Created',
-      message: `Your DAO proposal "${event.title}" (ID: ${event.proposalId}) has been created and is open for voting.`,
-    });
+    this.notificationService.createDaoNotification(
+      event.creatorId,
+      event.proposalId,
+      'Proposal Created',
+      `Your DAO proposal "${event.title}" (ID: ${event.proposalId}) has been created and is open for voting.`,
+    );
   }
 
   @OnEvent(EventNames.DAO_PROPOSAL_FINALIZED)
@@ -39,11 +39,11 @@ export class DaoEventListeners {
 
     const result = event.passed ? 'passed' : 'did not pass';
 
-    this.notificationService.createNotification({
-      userId: event.creatorId,
-      type: 'dao',
-      title: 'Proposal Voting Ended',
-      message: `Voting has ended for your DAO proposal (ID: ${event.proposalId}). Result: The proposal ${result}.`,
-    });
+    this.notificationService.createDaoNotification(
+      event.creatorId,
+      event.proposalId,
+      'Proposal Voting Ended',
+      `Voting has ended for your DAO proposal (ID: ${event.proposalId}). Result: The proposal ${result}.`,
+    );
   }
 }

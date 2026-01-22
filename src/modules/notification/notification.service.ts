@@ -1,68 +1,179 @@
-import { Injectable, Logger } from '@nestjs/common';
-import {
-  Notification,
-  CreateNotificationDto,
-} from './entities/notification.entity';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Notification, NotificationType } from './notification.entity';
+import { CreateNotificationDto } from './dto/create-notification.dto';
+import { UpdateNotificationReadStatusDto } from './dto/update-notification-read-status.dto';
+import { PaginationDto } from './dto/pagination.dto';
 
-/**
- * NotificationService handles notification creation and retrieval.
- * Uses in-memory storage for demonstration (replace with TypeORM in production).
- */
 @Injectable()
 export class NotificationService {
-  private readonly logger = new Logger(NotificationService.name);
+    constructor(
+        @InjectRepository(Notification)
+        private readonly notificationRepository: Repository<Notification>,
+    ) { }
 
-  /** In-memory notification store (replace with database in production) */
-  private readonly notifications: Notification[] = [];
+    async create(
+        createNotificationDto: CreateNotificationDto,
+    ): Promise<Notification> {
+        const notification = this.notificationRepository.create(
+            createNotificationDto,
+        );
+        return await this.notificationRepository.save(notification);
+    }
 
-  /**
-   * Create a new notification.
-   */
-  createNotification(dto: CreateNotificationDto): Notification {
-    const notification: Notification = {
-      id: this.generateId(),
-      userId: dto.userId,
-      type: dto.type,
-      title: dto.title,
-      message: dto.message,
-      read: false,
-      createdAt: new Date(),
-    };
+    async findAllByUserId(
+        userId: string,
+        paginationDto: PaginationDto,
+    ): Promise<{ notifications: Notification[]; totalCount: number }> {
+        const { page = 1, limit = 10 } = paginationDto;
+        const skip = (page - 1) * limit;
 
-    this.notifications.push(notification);
+        const [notifications, totalCount] =
+            await this.notificationRepository.findAndCount({
+                where: { userId },
+                order: { createdAt: 'DESC' },
+                skip,
+                take: limit,
+            });
 
-    this.logger.log(
-      `Notification created for user ${dto.userId}: ${dto.title}`,
-    );
+        return { notifications, totalCount };
+    }
 
-    return notification;
-  }
+    async findOne(id: string, userId: string): Promise<Notification> {
+        const notification = await this.notificationRepository.findOne({
+            where: { id, userId },
+        });
 
-  /**
-   * Get all notifications for a user.
-   */
-  getNotificationsByUserId(userId: string): Notification[] {
-    return this.notifications.filter(n => n.userId === userId);
-  }
+        if (!notification) {
+            throw new NotFoundException(`Notification with ID ${id} not found`);
+        }
 
-  /**
-   * Get all notifications (for testing purposes).
-   */
-  getAllNotifications(): Notification[] {
-    return [...this.notifications];
-  }
+        return notification;
+    }
 
-  /**
-   * Clear all notifications (for testing purposes).
-   */
-  clearAllNotifications(): void {
-    this.notifications.length = 0;
-  }
+    async updateReadStatus(
+        id: string,
+        userId: string,
+        updateDto: UpdateNotificationReadStatusDto,
+    ): Promise<Notification> {
+        const notification = await this.findOne(id, userId);
 
-  /**
-   * Generate a simple UUID-like ID.
-   */
-  private generateId(): string {
-    return `notif-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  }
+        notification.isRead = updateDto.isRead;
+        notification.updatedAt = new Date();
+
+        return await this.notificationRepository.save(notification);
+    }
+
+    async markAsRead(id: string, userId: string): Promise<Notification> {
+        return await this.updateReadStatus(id, userId, { isRead: true });
+    }
+
+    async markAsUnread(id: string, userId: string): Promise<Notification> {
+        return await this.updateReadStatus(id, userId, { isRead: false });
+    }
+
+    async getUnreadCount(userId: string): Promise<number> {
+        return await this.notificationRepository.count({
+            where: { userId, isRead: false },
+        });
+    }
+
+    async delete(id: string, userId: string): Promise<void> {
+        const notification = await this.findOne(id, userId);
+        await this.notificationRepository.remove(notification);
+    }
+
+    // Bulk operations
+    async markAllAsRead(userId: string): Promise<number> {
+        const result = await this.notificationRepository
+            .createQueryBuilder()
+            .update(Notification)
+            .set({ isRead: true, updatedAt: new Date() })
+            .where('userId = :userId AND isRead = false', { userId })
+            .execute();
+
+        return result.affected || 0;
+    }
+
+    async createBulk(
+        notifications: CreateNotificationDto[],
+    ): Promise<Notification[]> {
+        const notificationEntities =
+            this.notificationRepository.create(notifications);
+        return await this.notificationRepository.save(notificationEntities);
+    }
+
+    // Utility methods
+    async createClaimNotification(
+        userId: string,
+        claimId: string,
+        title: string,
+        message: string,
+        metadata?: Record<string, any>,
+    ): Promise<Notification> {
+        return await this.create({
+            userId,
+            type: NotificationType.CLAIM,
+            title,
+            message,
+            metadata: {
+                claimId,
+                ...metadata,
+            },
+        });
+    }
+
+    async createPolicyNotification(
+        userId: string,
+        policyId: string,
+        title: string,
+        message: string,
+        metadata?: Record<string, any>,
+    ): Promise<Notification> {
+        return await this.create({
+            userId,
+            type: NotificationType.POLICY,
+            title,
+            message,
+            metadata: {
+                policyId,
+                ...metadata,
+            },
+        });
+    }
+
+    async createDaoNotification(
+        userId: string,
+        proposalId: string,
+        title: string,
+        message: string,
+        metadata?: Record<string, any>,
+    ): Promise<Notification> {
+        return await this.create({
+            userId,
+            type: NotificationType.DAO,
+            title,
+            message,
+            metadata: {
+                proposalId,
+                ...metadata,
+            },
+        });
+    }
+
+    async createSystemNotification(
+        userId: string,
+        title: string,
+        message: string,
+        metadata?: Record<string, any>,
+    ): Promise<Notification> {
+        return await this.create({
+            userId,
+            type: NotificationType.SYSTEM,
+            title,
+            message,
+            metadata,
+        });
+    }
 }

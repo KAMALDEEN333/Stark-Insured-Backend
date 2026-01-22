@@ -17,7 +17,7 @@ import {
 export class ClaimEventListeners {
   private readonly logger = new Logger(ClaimEventListeners.name);
 
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(private readonly notificationService: NotificationService) { }
 
   @OnEvent(EventNames.CLAIM_SUBMITTED)
   handleClaimSubmitted(event: ClaimSubmittedEvent): void {
@@ -25,12 +25,12 @@ export class ClaimEventListeners {
       `Handling claim.submitted event for claim ${event.claimId}`,
     );
 
-    this.notificationService.createNotification({
-      userId: event.userId,
-      type: 'claim',
-      title: 'Claim Submitted',
-      message: `Your claim (ID: ${event.claimId}) has been submitted and is under review.`,
-    });
+    this.notificationService.createClaimNotification(
+      event.userId,
+      event.claimId,
+      'Claim Submitted',
+      `Your claim (ID: ${event.claimId}) has been submitted and is under review.`,
+    );
   }
 
   @OnEvent(EventNames.CLAIM_APPROVED)
@@ -39,12 +39,12 @@ export class ClaimEventListeners {
       `Handling claim.approved event for claim ${event.claimId}`,
     );
 
-    this.notificationService.createNotification({
-      userId: event.userId,
-      type: 'claim',
-      title: 'Claim Approved',
-      message: `Great news! Your claim (ID: ${event.claimId}) has been approved.`,
-    });
+    this.notificationService.createClaimNotification(
+      event.userId,
+      event.claimId,
+      'Claim Approved',
+      `Great news! Your claim (ID: ${event.claimId}) has been approved.`,
+    );
   }
 
   @OnEvent(EventNames.CLAIM_REJECTED)
@@ -53,12 +53,12 @@ export class ClaimEventListeners {
       `Handling claim.rejected event for claim ${event.claimId}`,
     );
 
-    this.notificationService.createNotification({
-      userId: event.userId,
-      type: 'claim',
-      title: 'Claim Rejected',
-      message: `Your claim (ID: ${event.claimId}) has been rejected. Reason: ${event.reason}`,
-    });
+    this.notificationService.createClaimNotification(
+      event.userId,
+      event.claimId,
+      'Claim Rejected',
+      `Your claim (ID: ${event.claimId}) has been rejected. Reason: ${event.reason}`,
+    );
   }
 
   @OnEvent(EventNames.CLAIM_SETTLED)
@@ -67,11 +67,11 @@ export class ClaimEventListeners {
       `Handling claim.settled event for claim ${event.claimId}`,
     );
 
-    this.notificationService.createNotification({
-      userId: event.userId,
-      type: 'claim',
-      title: 'Claim Settled',
-      message: `Your claim (ID: ${event.claimId}) has been settled. Amount: $${event.amount.toFixed(2)}`,
-    });
+    this.notificationService.createClaimNotification(
+      event.userId,
+      event.claimId,
+      'Claim Settled',
+      `Your claim (ID: ${event.claimId}) has been settled. Amount: $${event.amount.toFixed(2)}`,
+    );
   }
 }

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule } from './config/config.module';
+import { DatabaseModule } from './common/database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { ClaimsModule } from './modules/claims/claims.module';
 import { PolicyModule } from './modules/policy/policy.module';
@@ -22,6 +23,7 @@ import { AppService } from './app.service';
       },
     ]),
     ConfigModule,
+    DatabaseModule,
     HealthModule,
     ClaimsModule,
     PolicyModule,
