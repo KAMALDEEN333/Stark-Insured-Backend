@@ -48,7 +48,7 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
         ],
       }),
       inject: [AppConfigService],
-    }),
+    }),   
     HealthModule,
     ClaimsModule,
     PolicyModule,
@@ -66,4 +66,4 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }
