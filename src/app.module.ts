@@ -1,34 +1,63 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule } from './config/config.module';
+import { AppConfigService } from './config/app-config.service';
 import { DatabaseModule } from './common/database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { PolicyModule } from './modules/policy/policy.module';
+import { UsersModule } from './modules/users/users.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { UsersModule } from './modules/users/users.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule, HealthModule, NotificationModule],
-  imports: [ConfigModule, HealthModule, AuthModule],
-
-  imports: [ConfigModule, HealthModule, PolicyModule],
   imports: [
     ConfigModule,
+    DatabaseModule,
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: AppConfigService) => ({
+        throttlers: [
+          {
+            name: 'default',
+            ttl: configService.throttleDefaultTtl,
+            limit: configService.throttleDefaultLimit,
+          },
+          {
+            name: 'auth',
+            ttl: configService.throttleAuthTtl,
+            limit: configService.throttleAuthLimit,
+          },
+          {
+            name: 'public',
+            ttl: configService.throttlePublicTtl,
+            limit: configService.throttlePublicLimit,
+          },
+          {
+            name: 'admin',
+            ttl: configService.throttleAdminTtl,
+            limit: configService.throttleAdminLimit,
+          },
+        ],
+      }),
+      inject: [AppConfigService],
+    }),
     HealthModule,
     UsersModule,
     AuthModule,
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000,
-        limit: 10,
-      },
-    ]),
+    PolicyModule,
+    NotificationModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: CustomThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}
