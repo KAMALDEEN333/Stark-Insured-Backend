@@ -121,7 +121,7 @@ export class DaoService {
     castVoteDto: CastVoteDto,
     user: User,
   ): Promise<Vote> {
-    const walletAddress = user.stellarAddress!;
+    const walletAddress = user.walletAddress;
 
     // Use a transaction with pessimistic locking to prevent race conditions
     return this.dataSource.transaction(async manager => {

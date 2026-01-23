@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
@@ -9,6 +9,10 @@ export class UsersService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
   ) {}
+
+  async findByWalletAddress(walletAddress: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { walletAddress } });
+  }
 
   async findById(id: string): Promise<User | null> {
     return this.userRepository.findOne({ where: { id } });
@@ -18,21 +22,16 @@ export class UsersService {
     return this.userRepository.findOne({ where: { email } });
   }
 
-  async findByStellarAddress(stellarAddress: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { stellarAddress } });
+  async create(walletAddress: string): Promise<User> {
+    const newUser = this.userRepository.create({
+      walletAddress,
+      roles: [UserRole.USER],
+    });
+    return this.userRepository.save(newUser);
   }
 
-  async create(data: Partial<User>): Promise<User> {
-    const user = this.userRepository.create(data);
-    return this.userRepository.save(user);
-  }
-
-  async updateStellarAddress(
-    userId: string,
-    stellarAddress: string,
-  ): Promise<User | null> {
-    await this.userRepository.update(userId, { stellarAddress });
-    return this.findById(userId);
+  async updateLastLogin(id: string): Promise<void> {
+    await this.userRepository.update(id, { lastLoginAt: new Date() });
   }
 
   async update(userId: string, data: Partial<User>): Promise<User | null> {

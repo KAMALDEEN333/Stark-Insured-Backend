@@ -1,42 +1,101 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  Index,
-  OneToMany,
-} from 'typeorm';
+import { Entity, Column, OneToMany, Index } from 'typeorm';
+import { BaseEntity } from '../../../common/database/base.entity';
+import { Policy } from '../../policy/entities/policy.entity';
+import { Claim } from '../../claims/entities/claim.entity';
+import { Payment } from '../../payments/entities/payment.entity';
 import type { Vote } from '../../dao/entities/vote.entity';
 import type { Proposal } from '../../dao/entities/proposal.entity';
 
-@Entity('users')
-export class User {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+export enum UserRole {
+  USER = 'USER',
+  ORACLE = 'ORACLE',
+  DAO = 'DAO',
+  ADMIN = 'ADMIN',
+}
 
+export enum SignupSource {
+  ORGANIC = 'ORGANIC',
+  REFERRAL = 'REFERRAL',
+  MARKETING_CAMPAIGN = 'MARKETING_CAMPAIGN',
+  BULK_IMPORT = 'BULK_IMPORT',
+  API = 'API',
+  PARTNERSHIP = 'PARTNERSHIP',
+}
+
+export enum UserStatus {
+  PENDING_VERIFICATION = 'PENDING_VERIFICATION',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  SUSPENDED = 'SUSPENDED',
+  DELETED = 'DELETED',
+}
+
+@Entity('users')
+export class User extends BaseEntity {
   @Column({ unique: true })
   @Index()
-  email: string;
+  walletAddress: string;
 
-  @Column({ name: 'password_hash' })
-  passwordHash: string;
+  @Column({ nullable: true })
+  email?: string;
 
-  @Column({ name: 'stellar_address', length: 56, nullable: true, unique: true })
-  @Index()
-  stellarAddress: string | null;
+  @Column({ nullable: true })
+  displayName?: string;
 
-  @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    array: true,
+    default: [UserRole.USER],
+  })
+  roles: UserRole[];
 
-  @Column({ name: 'is_verified', default: false })
-  isVerified: boolean;
+  @Column({
+    type: 'enum',
+    enum: UserStatus,
+    default: UserStatus.ACTIVE,
+  })
+  status: UserStatus;
 
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  @Column({
+    type: 'enum',
+    enum: SignupSource,
+    default: SignupSource.ORGANIC,
+  })
+  signupSource: SignupSource;
 
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  @Column({ nullable: true })
+  referralCode?: string;
+
+  @Column({ nullable: true })
+  referrerId?: string;
+
+  @Column({ default: false })
+  isEmailVerified: boolean;
+
+  @Column({ default: false })
+  isWalletVerified: boolean;
+
+  @Column({ default: false })
+  kycVerified: boolean;
+
+  @Column({ default: false })
+  twoFactorEnabled: boolean;
+
+  @Column({ nullable: true })
+  lastLoginAt?: Date;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata?: Record<string, any>;
+
+  @OneToMany(() => Policy, (policy) => policy.user)
+  policies: Policy[];
+
+  @OneToMany(() => Claim, (claim) => claim.user)
+  claims: Claim[];
+
+  @OneToMany(() => Payment, (payment) => payment.user)
+  payments: Payment[];
 
   @OneToMany('Vote', 'user')
   votes: Vote[];

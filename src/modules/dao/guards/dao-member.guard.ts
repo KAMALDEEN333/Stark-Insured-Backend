@@ -21,9 +21,9 @@ export class DaoMemberGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    if (!user.stellarAddress) {
+    if (!user.walletAddress) {
       throw new ForbiddenException(
-        'A linked Stellar wallet address is required to participate in DAO voting',
+        'A linked wallet address is required to participate in DAO voting',
       );
     }
 

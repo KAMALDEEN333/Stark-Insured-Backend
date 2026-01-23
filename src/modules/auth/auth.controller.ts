@@ -1,40 +1,45 @@
-import { Body, Controller, Post } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, AuthResponseDto } from './dto';
-import { Public } from './decorators/public.decorator';
+import { LoginChallengeDto } from './dto/login-challenge.dto';
+import { LoginDto } from './dto/login.dto';
+import { ApiTags, ApiOperation, ApiResponse, ApiTooManyRequestsResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('register')
   @Public()
-  @ApiOperation({ summary: 'Register a new user' })
-  @ApiResponse({
-    status: 201,
-    description: 'User registered successfully',
-    type: AuthResponseDto,
+  @Post('login/challenge')
+  @ApiOperation({ summary: 'Request a login challenge' })
+  @ApiResponse({ status: 200, description: 'Challenge generated' })
+  @ApiTooManyRequestsResponse({
+    description: 'Rate limit exceeded. Too many challenge requests.',
   })
-  @ApiResponse({
-    status: 409,
-    description: 'Email or Stellar address already registered',
-  })
-  async register(@Body() registerDto: RegisterDto): Promise<AuthResponseDto> {
-    return this.authService.register(registerDto);
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: { limit: 5, ttl: 900000 } }) // 5 requests per 15 minutes
+  async getLoginChallenge(@Body() dto: LoginChallengeDto) {
+    return this.authService.generateChallenge(dto.walletAddress);
   }
 
-  @Post('login')
   @Public()
-  @ApiOperation({ summary: 'Login with email and password' })
-  @ApiResponse({
-    status: 200,
-    description: 'Login successful',
-    type: AuthResponseDto,
+  @Post('login')
+  @ApiOperation({ summary: 'Submit login signature' })
+  @ApiResponse({ status: 200, description: 'Login successful, JWT issued' })
+  @ApiTooManyRequestsResponse({
+    description: 'Rate limit exceeded. Too many login attempts.',
   })
-  @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
-    return this.authService.login(loginDto);
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: { limit: 10, ttl: 3600000 } }) // 10 requests per hour
+  async login(@Body() dto: LoginDto) {
+    return this.authService.login(dto.walletAddress, dto.signature);
   }
 }
