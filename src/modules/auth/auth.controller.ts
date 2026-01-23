@@ -6,8 +6,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginChallengeDto } from './dto/login-challenge.dto';
-import { LoginDto } from './dto/login.dto';
+import { LoginChallengeDto } from './dtos/login-challenge.dto';
+import { LoginDto } from './dtos/login.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiTooManyRequestsResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 
