@@ -1,17 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { HealthModule } from './modules/health/health.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { PolicyModule } from './modules/policy/policy.module'; // Asegúrate de que esta ruta sea correcta
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-
-@Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    HealthModule,
-    AuthModule,
-    PolicyModule,
 import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -25,6 +12,7 @@ import { DaoModule } from './modules/dao/dao.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { FileModule } from './modules/file/file.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
@@ -61,7 +49,7 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
         ],
       }),
       inject: [AppConfigService],
-    }),   
+    }),
     HealthModule,
     ClaimsModule,
     PolicyModule,
@@ -69,6 +57,7 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
     NotificationModule,
     UsersModule,
     AuthModule,
+    FileModule,
   ],
   controllers: [AppController],
   providers: [
