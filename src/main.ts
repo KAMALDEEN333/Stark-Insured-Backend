@@ -22,6 +22,9 @@ async function bootstrap(): Promise<void> {
   // Security middleware
   app.use(helmet());
 
+  // Set global prefix
+  app.setGlobalPrefix('api/v1');
+
   // Global validation pipe
   app.useGlobalPipes(AppValidationPipe);
 
@@ -55,9 +58,9 @@ async function bootstrap(): Promise<void> {
 
   // Log startup information
   /* eslint-disable no-console */
-  console.log(`\n🚀 Application is running on: http://localhost:${port}`);
+  console.log(`\n Application is running on: http://localhost:${port}`);
   console.log(
-    `📊 Environment: ${configService.get('NODE_ENV', 'development')}`,
+    ` Environment: ${configService.get('NODE_ENV', 'development')}`,
   );
   console.log(`📋 Swagger UI: http://localhost:${port}/api/docs`);
   /* eslint-enable no-console */

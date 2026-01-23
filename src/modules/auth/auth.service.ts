@@ -1,101 +1,153 @@
 import {
-  BadRequestException,
-  ConflictException,
+  Inject,
   Injectable,
   UnauthorizedException,
+  NotFoundException,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
-import { AppConfigService } from '../../config/app-config.service';
-import { UsersService } from '../users/users.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { AuthResponseDto, UserResponseDto } from './dto/auth-response.dto';
-import { JwtPayload } from './interfaces/jwt-payload.interface';
-import { User } from '../users/entities/user.entity';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import { UsersService, User } from '../users/users.service';
+import * as crypto from 'crypto';
+import { Keypair } from 'stellar-sdk';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
-    private readonly usersService: UsersService,
-    private readonly jwtService: JwtService,
-    private readonly configService: AppConfigService,
-  ) {}
+    private usersService: UsersService,
+    private jwtService: JwtService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) { }
 
-  async register(dto: RegisterDto): Promise<AuthResponseDto> {
-    const existingUser = await this.usersService.findByEmail(dto.email);
-    if (existingUser) {
-      throw new ConflictException('Email already registered');
-    }
+  async generateChallenge(walletAddress: string) {
+    this.logger.log(`Generating login challenge for wallet ${walletAddress}`);
+    // 1. Validate wallet address (Basic check handled by DTO, but ensure basic length/format)
 
-    if (dto.stellarAddress) {
-      const existingStellar = await this.usersService.findByStellarAddress(
-        dto.stellarAddress,
-      );
-      if (existingStellar) {
-        throw new ConflictException('Stellar address already registered');
-      }
-    }
+    // 2. Generate Nonce
+    const nonce = crypto.randomBytes(32).toString('hex');
+    const timestamp = Math.floor(Date.now() / 1000);
 
-    const passwordHash = await bcrypt.hash(
-      dto.password,
-      this.configService.bcryptSaltRounds,
+    const message = `Sign this message to login to InsuranceDAO\nNonce: ${nonce}\nTimestamp: ${timestamp}`;
+
+    // 3. Store in Cache
+    const key = `auth:challenge:${walletAddress}`;
+    const ttl = 10 * 60 * 1000; // 10 minutes in milliseconds
+
+    await this.cacheManager.set(
+      key,
+      { nonce, timestamp, message },
+      ttl,
     );
 
-    const user = await this.usersService.create({
-      email: dto.email,
-      passwordHash,
-      stellarAddress: dto.stellarAddress,
-    });
-
-    const accessToken = this.generateToken(user);
+    // 4. Return response
+    const expiresAt = new Date((timestamp + 600) * 1000).toISOString();
 
     return {
-      accessToken,
-      user: this.toUserResponse(user),
+      challenge: message,
+      expiresAt,
     };
   }
 
-  async login(dto: LoginDto): Promise<AuthResponseDto> {
-    const user = await this.usersService.findByEmail(dto.email);
+  async login(walletAddress: string, signature: string) {
+    this.logger.log(`Login attempt for wallet ${walletAddress}`);
+
+    // Check Lockout
+    const lockoutKey = `auth:lockout:${walletAddress}`;
+    const failures = await this.cacheManager.get<number>(lockoutKey) || 0;
+    if (failures >= 5) {
+      this.logger.warn(`Wallet ${walletAddress} is locked out due to too many failed attempts`);
+      throw new BadRequestException('Wallet is temporarily locked due to too many failed attempts. Try again in 15 minutes.');
+    }
+
+    const key = `auth:challenge:${walletAddress}`;
+    const cached: any = await this.cacheManager.get(key);
+
+    if (!cached) {
+      throw new NotFoundException('Challenge not found or expired');
+    }
+
+    const { message, timestamp } = cached;
+
+    // Verify timestamp (5 minute window check)
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    if (currentTimestamp - timestamp > 300) { // 300 seconds = 5 mins
+      await this.incrementFailure(walletAddress);
+      throw new BadRequestException('Challenge expired (5 minute window)');
+    }
+
+    // Verify Signature
+    try {
+      const keypair = Keypair.fromPublicKey(walletAddress);
+
+      const messageBuffer = Buffer.from(message);
+      const signatureBuffer = Buffer.from(signature, 'base64');
+
+      const isValid = keypair.verify(messageBuffer, signatureBuffer);
+
+      if (!isValid) {
+        await this.incrementFailure(walletAddress);
+        this.logger.warn(`Invalid signature for wallet ${walletAddress}`);
+        throw new UnauthorizedException('Invalid signature');
+      }
+    } catch (error: any) {
+      await this.incrementFailure(walletAddress);
+      this.logger.error(`Signature verification failed for ${walletAddress}: ${error.message}`);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      throw new UnauthorizedException('Signature verification failed: ' + error.message);
+    }
+
+    // Check User
+    const user = await this.usersService.findByWalletAddress(walletAddress);
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      this.logger.warn(`Wallet ${walletAddress} not registered`);
+      throw new NotFoundException('User not found. Wallet not registered.');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    // Invalidate Nonce (Replay Attack Prevention)
+    await this.cacheManager.del(key);
+    // Clear failures on success
+    await this.cacheManager.del(lockoutKey);
 
-    if (!user.isActive) {
-      throw new UnauthorizedException('Account is deactivated');
-    }
+    this.logger.log(`Login successful for user ${user.id} (${walletAddress})`);
 
-    const accessToken = this.generateToken(user);
+    // Generate Tokens
+    return this.generateTokens(user);
+  }
+
+  private async incrementFailure(walletAddress: string) {
+    const lockoutKey = `auth:lockout:${walletAddress}`;
+    const failures = (await this.cacheManager.get<number>(lockoutKey) || 0) + 1;
+    const ttl = 15 * 60 * 1000; // 15 minutes
+    await this.cacheManager.set(lockoutKey, failures, ttl);
+  }
+
+  private async generateTokens(user: User) {
+    const payload = {
+      sub: user.id,
+      walletAddress: user.walletAddress,
+      email: user.email,
+      roles: user.roles,
+    };
+
+    const accessToken = this.jwtService.sign(payload);
+
+    // Update last login
+    await this.usersService.updateLastLogin(user.id);
 
     return {
       accessToken,
-      user: this.toUserResponse(user),
-    };
-  }
-
-  private generateToken(user: User): string {
-    const payload: JwtPayload = {
-      sub: user.id,
-      email: user.email,
-    };
-
-    return this.jwtService.sign(payload);
-  }
-
-  private toUserResponse(user: User): UserResponseDto {
-    return {
-      id: user.id,
-      email: user.email,
-      stellarAddress: user.stellarAddress,
-      isActive: user.isActive,
-      isVerified: user.isVerified,
-      createdAt: user.createdAt,
+      tokenType: 'Bearer',
+      expiresIn: 86400, // 24 hours
+      user: {
+        id: user.id,
+        walletAddress: user.walletAddress,
+        email: user.email,
+        roles: user.roles,
+      },
     };
   }
 }

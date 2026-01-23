@@ -1,50 +1,37 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import * as crypto from 'crypto';
+
+export interface User {
+  id: string;
+  walletAddress: string;
+  email?: string;
+  roles: string[];
+  lastLoginAt?: Date;
+}
 
 @Injectable()
 export class UsersService {
-  constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-  ) {}
+  private users: User[] = [];
 
-  async findById(id: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { id } });
+  findByWalletAddress(walletAddress: string): Promise<User | undefined> {
+    return Promise.resolve(this.users.find((u) => u.walletAddress === walletAddress));
   }
 
-  async findByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { email } });
+  create(walletAddress: string): Promise<User> {
+    const newUser: User = {
+      id: crypto.randomUUID(),
+      walletAddress,
+      roles: ['USER'],
+    };
+    this.users.push(newUser);
+    return Promise.resolve(newUser);
   }
 
-  async findByStellarAddress(stellarAddress: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { stellarAddress } });
-  }
-
-  async create(data: {
-    email: string;
-    passwordHash: string;
-    stellarAddress?: string;
-  }): Promise<User> {
-    const user = this.userRepository.create({
-      email: data.email,
-      passwordHash: data.passwordHash,
-      stellarAddress: data.stellarAddress || null,
-    });
-    return this.userRepository.save(user);
-  }
-
-  async updateStellarAddress(
-    userId: string,
-    stellarAddress: string,
-  ): Promise<User | null> {
-    await this.userRepository.update(userId, { stellarAddress });
-    return this.findById(userId);
-  }
-
-  async update(userId: string, data: Partial<User>): Promise<User | null> {
-    await this.userRepository.update(userId, data);
-    return this.findById(userId);
+  updateLastLogin(id: string): Promise<void> {
+    const user = this.users.find((u) => u.id === id);
+    if (user) {
+      user.lastLoginAt = new Date();
+    }
+    return Promise.resolve();
   }
 }

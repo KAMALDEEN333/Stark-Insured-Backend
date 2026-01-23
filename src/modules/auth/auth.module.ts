@@ -1,31 +1,35 @@
 import { Module } from '@nestjs/common';
-import { PassportModule } from '@nestjs/passport';
-import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
-import { ConfigModule } from '../../config/config.module';
-import { AppConfigService } from '../../config/app-config.service';
-import { UsersModule } from '../users/users.module';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { JwtStrategy } from './strategies/jwt.strategy';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { UsersModule } from '../users/users.module';
+import { PassportModule } from '@nestjs/passport';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule } from '../../config/config.module';
+import { AppConfigService } from '../../config/app-config.service';
+import { CacheModule } from '@nestjs/cache-manager';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
     UsersModule,
-    PassportModule.register({ defaultStrategy: 'jwt' }),
+    PassportModule,
+    ConfigModule,
+    CacheModule.register(),
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 10,
+    }]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      inject: [AppConfigService],
-      useFactory: (configService: AppConfigService) => ({
+      useFactory: async (configService: AppConfigService) => ({
         secret: configService.jwtSecret,
-        signOptions: {
-          expiresIn: configService.jwtExpiresIn,
-        } as JwtSignOptions,
+        signOptions: { expiresIn: configService.jwtExpiresIn as any },
       }),
+      inject: [AppConfigService],
     }),
   ],
+  providers: [AuthService],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
-  exports: [AuthService, JwtAuthGuard, JwtStrategy],
+  exports: [AuthService],
 })
 export class AuthModule {}
