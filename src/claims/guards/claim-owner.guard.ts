@@ -1,15 +1,15 @@
 import {
-  Injectable,
   CanActivate,
   ExecutionContext,
+  Injectable,
   ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
-import { Request } from 'express';
-import { ClaimService } from '../services/claim.service';
+import { ClaimsService } from '../../modules/claims/claims.service';
 
 @Injectable()
 export class ClaimOwnerGuard implements CanActivate {
-  constructor(private claimService: ClaimService) {}
+  constructor(private readonly claimService: ClaimsService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();

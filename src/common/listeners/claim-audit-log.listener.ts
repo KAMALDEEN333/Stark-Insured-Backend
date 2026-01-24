@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 // FIX 1: Import everything from the central events index (where we added the missing properties)
 import { 
@@ -16,9 +16,7 @@ import { AuditLogService } from '../services/audit-log.service';
  */
 @Injectable()
 export class ClaimAuditLogListener {
-  private readonly logger = new Logger(ClaimAuditLogListener.name);
-
-  constructor(private auditLogService: AuditLogService) {}
+  constructor(private readonly auditLogService: AuditLogService) {}
 
   @OnEvent(EventNames.CLAIM_SUBMITTED)
   async handleClaimSubmitted(event: ClaimSubmittedEvent): Promise<void> {

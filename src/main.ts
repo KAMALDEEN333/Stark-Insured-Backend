@@ -4,7 +4,6 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppValidationPipe } from './common/pipes/validation.pipe';
-import { QueueService } from './modules/queue/queue.service';
 import helmet from 'helmet';
 
 async function bootstrap(): Promise<void> {
@@ -13,7 +12,6 @@ async function bootstrap(): Promise<void> {
   // Get configuration service
   const configService = app.get(ConfigService);
   // queueService is available for manual use if needed, but we rely on lifecycle hooks now
-  const queueService = app.get(QueueService);
 
   // Enable CORS
   const corsOrigin = configService.get<string>('CORS_ORIGIN');
@@ -35,7 +33,6 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Enable shutdown hooks
-  // This allows services (like QueueService) to run their OnModuleDestroy logic automatically
   app.enableShutdownHooks();
 
   // Swagger setup

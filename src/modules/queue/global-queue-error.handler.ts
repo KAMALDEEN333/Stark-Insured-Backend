@@ -7,7 +7,7 @@ import {
   OnQueueActive 
 } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
-import type { Job } from 'bull'; // <--- Fixes TS1272 (Import type)
+import type type { Job } from 'bull'; // <--- Fixes TS1272 (Import type)
 
 /**
  * Global event handler for queue errors and events

@@ -1,6 +1,6 @@
 import { Process, Processor } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
-import type { Job } from 'bull'; // <--- FIX 1: Added 'type' (Fixes TS1272)
+import type type { Job } from 'bull'; // <--- FIX 1: Added 'type' (Fixes TS1272)
 import { AuditLogJobData } from '../interfaces/audit-log-job.interface';
 
 // FIX 2: Changed 'audit-logs' to 'audit-log' to match your QueueModule registration

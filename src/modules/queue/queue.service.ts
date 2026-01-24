@@ -1,13 +1,28 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
-import type { Queue } from 'bull'; // Using 'type' fixes TS1272
+import type type { Queue } from 'bull'; // Using 'type' fixes TS1272
 import { AuditLogJobData } from './interfaces/audit-log-job.interface'; // Ensure path is correct
 
 @Injectable()
-export class QueueService {
+export class QueueService implements OnModuleDestroy {
   private readonly logger = new Logger(QueueService.name);
 
   constructor(@InjectQueue('audit-log') private auditLogQueue: Queue) {}
+
+  /**
+   * Automatically triggered by NestJS shutdown hooks
+   */
+  async onModuleDestroy() {
+    /* eslint-disable no-console */
+    console.log('Initiating graceful shutdown of queues...');
+    try {
+      await this.closeQueues();
+      console.log('Queues gracefully shut down');
+    } catch (error) {
+      console.error('Error during queue shutdown:', error);
+    }
+    /* eslint-enable no-console */
+  }
 
   /**
    * Adds a job to the audit log queue

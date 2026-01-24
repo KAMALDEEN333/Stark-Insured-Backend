@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '../../config/config.module'; // Adjusted to match your previous app.module imports
 import { QueueService } from './queue.service';
 import { AuditLogProcessor } from './processors/audit-log.processor';
 import { QueueController } from './queue.controller';
