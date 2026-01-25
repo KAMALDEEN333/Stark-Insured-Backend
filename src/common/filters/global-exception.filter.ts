@@ -6,7 +6,9 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Response, Request } from 'express';
+import { ApiErrorResponse } from '../interfaces/api-response.interface';
+import { getErrorCode } from '../constants/error-codes';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -19,10 +21,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
-    let error = 'Internal Server Error';
+    let errorCode = getErrorCode(status);
+    let details: Record<string, unknown> | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
+      errorCode = getErrorCode(status);
       const exceptionResponse = exception.getResponse();
 
       if (typeof exceptionResponse === 'string') {
@@ -38,8 +42,19 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ) {
           message = responseObj.message;
         }
+        // Extract validation errors if available
         if ('error' in responseObj && typeof responseObj.error === 'string') {
-          error = responseObj.error;
+          const errorField = responseObj.error;
+          if (
+            errorField.toLowerCase().includes('validation') ||
+            errorField.toLowerCase().includes('bad request')
+          ) {
+            errorCode = 'VALIDATION_ERROR';
+          }
+        }
+        // Capture validation details
+        if ('message' in responseObj && Array.isArray(responseObj.message)) {
+          details = { validationErrors: responseObj.message };
         }
       }
     } else {
@@ -49,12 +64,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       );
     }
 
-    const errorResponse = {
+    const errorResponse: ApiErrorResponse = {
+      success: false,
+      message,
       statusCode: status,
+      errorCode,
       timestamp: new Date().toISOString(),
       path: request.url,
-      message,
-      error,
+      ...(details && { details }),
     };
 
     response.status(status).json(errorResponse);
