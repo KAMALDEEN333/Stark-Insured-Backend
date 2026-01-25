@@ -1,10 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppValidationPipe } from './common/pipes/validation.pipe';
 import helmet from 'helmet';
+import { AppConfigService } from './config/app-config.service';
+import { Logger } from '@nestjs/common';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -52,10 +53,40 @@ async function bootstrap(): Promise<void> {
     );
   }
 
-  // Get port from config
-  const port = configService.get<number>('PORT', 4000);
+    // Get port from config - Use typed getter
+    const port = configService.port;
+    logger.log(`📡 Attempting to start server on port ${port}...`);
 
-  await app.listen(port);
+    await app.listen(port);
+
+    // Success message
+    logger.log(`\n🎉 ==========================================`);
+    logger.log(`🚀 ${configService.appName} v${configService.appVersion}`);
+    logger.log(`🌍 Running on: http://localhost:${port}`);
+    logger.log(`📊 Environment: ${configService.nodeEnv}`);
+    logger.log(
+      `📋 Swagger UI: http://localhost:${port}${configService.swaggerPath}`,
+    );
+    logger.log(`⚡ Health check: http://localhost:${port}/health`);
+    logger.log(`🔗 Stellar Network: ${configService.stellarNetwork}`);
+    logger.log(
+      `💾 Database: ${configService.databaseHost}:${configService.databasePort}`,
+    );
+    logger.log(
+      `🔄 Redis: ${configService.redisHost}:${configService.redisPort}`,
+    );
+    logger.log(`==========================================\n`);
+  } catch (error) {
+    logger.error('❌ Failed to bootstrap application:', error);
+
+    // Log the full error stack
+    if (error instanceof Error) {
+      logger.error(`Error name: ${error.name}`);
+      logger.error(`Error message: ${error.message}`);
+      logger.error(`Error stack: ${error.stack}`);
+    } else {
+      logger.error(`Unknown error: ${JSON.stringify(error)}`);
+    }
 
   // Log startup information
   /* eslint-disable no-console */

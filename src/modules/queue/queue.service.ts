@@ -6,7 +6,9 @@ import { AuditLogJobData } from './interfaces/audit-log-job.interface';
 @Injectable()
 export class QueueService implements OnModuleDestroy {
   constructor(
-    @InjectQueue('audit-logs') private auditLogsQueue: Queue,
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    @InjectQueue('audit-logs')
+    private readonly auditLogsQueue: Queue<AuditLogJobData>,
   ) {}
 
   /**

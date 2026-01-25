@@ -6,9 +6,11 @@ import { QueueService } from './queue.service';
 import { QueueController } from './queue.controller';
 import { AuditLogProcessor } from './processors/audit-log.processor';
 import { GlobalQueueErrorHandler } from './global-queue-error.handler';
+import { QueueList } from './queue.config';
 
 @Module({
   imports: [
+    // 1. Configure Bull with proper typing
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: AppConfigService) => ({
@@ -25,21 +27,27 @@ import { GlobalQueueErrorHandler } from './global-queue-error.handler';
             type: 'exponential',
             delay: configService.get('QUEUE_JOB_BACKOFF_DELAY') || 2000,
           },
-          removeOnComplete: true,
-          removeOnFail: false,
-        },
-        settings: {
-          stalledInterval: 5000,
-          maxStalledCount: 2,
-          lockDuration: 30000,
-          lockRenewTime: 15000,
-        },
-      }),
-      inject: [AppConfigService],
+          defaultJobOptions: {
+            attempts: configService.get<number>('QUEUE_JOB_ATTEMPTS', 3),
+            backoff: {
+              type: 'exponential' as const, // Type assertion
+              delay: configService.get<number>('QUEUE_JOB_BACKOFF_DELAY', 2000),
+            },
+            removeOnComplete: true,
+            removeOnFail: false,
+          },
+          settings: {
+            stalledInterval: 5000,
+            maxStalledCount: 2,
+            lockDuration: 30000,
+            lockRenewTime: 15000,
+          },
+        };
+        return options;
+      },
+      inject: [ConfigService],
     }),
-    BullModule.registerQueue({
-      name: 'audit-logs',
-    }),
+    BullModule.registerQueue(...QueueList),
   ],
   controllers: [QueueController],
   providers: [QueueService, AuditLogProcessor, GlobalQueueErrorHandler],
