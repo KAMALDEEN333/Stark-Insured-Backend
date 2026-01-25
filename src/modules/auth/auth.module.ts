@@ -4,7 +4,7 @@ import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule } from '../../config/config.module';
+import { ConfigModule as NestConfigModule } from '@nestjs/config';
 import { AppConfigService } from '../../config/app-config.service';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -20,7 +20,7 @@ import { PermissionGuard } from 'src/permissions/permission.guard';
   imports: [
     UsersModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    ConfigModule,
+    NestConfigModule,
     CacheModule.register(),
     ThrottlerModule.forRoot([
       {
@@ -29,8 +29,8 @@ import { PermissionGuard } from 'src/permissions/permission.guard';
       },
     ]),
     JwtModule.registerAsync({
-      imports: [ConfigModule],
-      useFactory: async (configService: AppConfigService) => ({
+      imports: [NestConfigModule],
+      useFactory: (configService: AppConfigService) => ({
         secret: configService.jwtSecret,
         signOptions: { expiresIn: configService.jwtExpiresIn as any },
       }),

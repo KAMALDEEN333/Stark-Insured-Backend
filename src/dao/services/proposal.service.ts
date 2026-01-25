@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Proposal } from '../entities/proposal.entity';
@@ -14,7 +19,10 @@ export class ProposalService {
     private userRepository: Repository<User>,
   ) {}
 
-  async createProposal(createProposalDto: CreateProposalDto, userId: string): Promise<Proposal> {
+  async createProposal(
+    createProposalDto: CreateProposalDto,
+    userId: string,
+  ): Promise<Proposal> {
     // Validate that the user is a DAO member (authorized)
     const user = await this.userRepository.findOne({
       where: { id: userId },
@@ -30,11 +38,17 @@ export class ProposalService {
     }
 
     // Validate proposal data
-    if (!createProposalDto.title || createProposalDto.title.trim().length === 0) {
+    if (
+      !createProposalDto.title ||
+      createProposalDto.title.trim().length === 0
+    ) {
       throw new BadRequestException('Proposal title is required');
     }
 
-    if (!createProposalDto.description || createProposalDto.description.trim().length === 0) {
+    if (
+      !createProposalDto.description ||
+      createProposalDto.description.trim().length === 0
+    ) {
       throw new BadRequestException('Proposal description is required');
     }
 
@@ -50,8 +64,12 @@ export class ProposalService {
     proposal.submitterWalletAddress = createProposalDto.submitterWalletAddress;
     proposal.submitter = user;
     proposal.status = 'draft';
-    proposal.votingStartDate = createProposalDto.votingStartDate ? new Date(createProposalDto.votingStartDate) : null;
-    proposal.votingEndDate = createProposalDto.votingEndDate ? new Date(createProposalDto.votingEndDate) : null;
+    proposal.votingStartDate = createProposalDto.votingStartDate
+      ? new Date(createProposalDto.votingStartDate)
+      : null;
+    proposal.votingEndDate = createProposalDto.votingEndDate
+      ? new Date(createProposalDto.votingEndDate)
+      : null;
 
     // Persist to database
     return this.proposalRepository.save(proposal);
@@ -70,7 +88,10 @@ export class ProposalService {
     return proposal;
   }
 
-  async getAllProposals(skip: number = 0, take: number = 10): Promise<{ data: Proposal[]; total: number }> {
+  async getAllProposals(
+    skip: number = 0,
+    take: number = 10,
+  ): Promise<{ data: Proposal[]; total: number }> {
     const [proposals, total] = await this.proposalRepository.findAndCount({
       relations: ['submitter'],
       skip,
@@ -81,7 +102,11 @@ export class ProposalService {
     return { data: proposals, total };
   }
 
-  async updateProposalStatus(proposalId: string, status: string, userId: string): Promise<Proposal> {
+  async updateProposalStatus(
+    proposalId: string,
+    status: string,
+    userId: string,
+  ): Promise<Proposal> {
     const proposal = await this.getProposalById(proposalId);
 
  // src/dao/services/proposal.service.ts
