@@ -76,7 +76,7 @@ export class AuditLogService {
     } catch (error) {
       this.logger.error(
         `Failed to queue audit log for policy ${policyId}`,
-        error.stack,
+        error,
       );
       // Don't throw - audit logging should not block main operations
     }
@@ -111,9 +111,8 @@ export class AuditLogService {
     } catch (error) {
       this.logger.error(
         `Failed to queue audit log for ${entity} ${entityId}`,
-        error.stack,
+        error,
       );
-      // Don't throw - audit logging should not block main operations
     }
   }
 }
