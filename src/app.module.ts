@@ -19,6 +19,7 @@ import { FileModule } from './modules/file/file.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { AuditLogModule } from './common/audit-log/audit-log.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { FilesController } from './modules/files/files.controller';
@@ -81,6 +82,7 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
     PaymentsModule,
     QueueModule,
     AuditLogModule,
+    AuditModule,
   ],
   controllers: [AppController, FilesController],
   providers: [

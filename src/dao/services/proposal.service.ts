@@ -9,6 +9,8 @@ import { Repository } from 'typeorm';
 import { Proposal } from '../entities/proposal.entity';
 import { CreateProposalDto } from '../dto/create-proposal.dto';
 import { User, UserRole } from '../../modules/users/entities/user.entity';
+import { AuditService } from '../../modules/audit/services/audit.service';
+import { AuditActionType } from '../../modules/audit/enums/audit-action-type.enum';
 
 @Injectable()
 export class ProposalService {
@@ -17,6 +19,7 @@ export class ProposalService {
     private proposalRepository: Repository<Proposal>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private auditService: AuditService,
   ) {}
 
   async createProposal(
@@ -72,7 +75,20 @@ export class ProposalService {
       : null;
 
     // Persist to database
-    return this.proposalRepository.save(proposal);
+    const savedProposal = await this.proposalRepository.save(proposal);
+
+    // Audit log the proposal submission
+    await this.auditService.logAction(
+      AuditActionType.PROPOSAL_SUBMITTED,
+      userId,
+      savedProposal.id,
+      {
+        title: savedProposal.title,
+        submitterWalletAddress: savedProposal.submitterWalletAddress,
+      },
+    );
+
+    return savedProposal;
   }
 
   async getProposalById(proposalId: string): Promise<Proposal> {
