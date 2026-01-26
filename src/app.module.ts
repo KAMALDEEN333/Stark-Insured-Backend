@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -19,8 +20,11 @@ import { FileModule } from './modules/file/file.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { AuditLogModule } from './common/audit-log/audit-log.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { FilesController } from './modules/files/files.controller';
 import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
@@ -29,6 +33,8 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
   imports: [
     EventEmitterModule.forRoot(),
     ConfigModule,
+    HealthModule,
+    
     // Redis-backed Cache Implementation
     CacheModule.registerAsync({
       isGlobal: true,
@@ -91,6 +97,14 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
       provide: APP_GUARD,
       useClass: CustomThrottlerGuard,
     },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ResponseInterceptor,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
+    }
   ],
 })
 export class AppModule {}

@@ -1,28 +1,113 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { Cache } from 'cache-manager';
 import { Policy } from './entities/policy.entity';
 import { PolicyStateMachineService } from './services/policy-state-machine.service';
+import { PolicyAuditService } from './services/policy-audit.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { PolicyStatus } from './enums/policy-status.enum';
+import { PolicyTransitionAction } from './enums/policy-transition-action.enum';
+import { CreatePolicyDto } from './dto/create-policy.dto';
+import {
+  EventNames,
+  PolicyIssuedEvent,
+  PolicyRenewedEvent,
+  PolicyExpiredEvent,
+  PolicyCancelledEvent,
+} from '../../events';
+import { AuditService } from '../audit/services/audit.service';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum';
 
 @Injectable()
 export class PolicyService {
+  private readonly logger = new Logger(PolicyService.name);
+
   constructor(
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     @InjectRepository(Policy)
-    private readonly policyRepository: Repository<Policy>,
-    private readonly stateMachine: PolicyStateMachineService,
+    private policyRepository: Repository<Policy>,
+    private stateMachine: PolicyStateMachineService,
+    private auditService: PolicyAuditService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly auditLogService: AuditService,
   ) {}
 
-  async createPolicy(dto: any, userId: string) {
-    const policy = await this.policyRepository.save({
-      ...dto,
-      createdBy: userId,
+  /**
+   * Creates a new policy in DRAFT status.
+   */
+  async createPolicy(dto: CreatePolicyDto, userId: string): Promise<Policy> {
+    // Note: In a real app, we'd fetch the User entity first
+    const policy = this.policyRepository.create({
+      policyNumber: `POL-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+      status: PolicyStatus.DRAFT,
+      coverageType: dto.coverageType,
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      premium: dto.premium,
     });
-    
+
+    const savedPolicy = await this.policyRepository.save(policy);
+    this.logger.log(`Policy created: ${savedPolicy.id} in ${savedPolicy.status} status`);
+
+    // Audit log the policy creation
+    await this.auditLogService.logAction(
+      AuditActionType.POLICY_CREATED,
+      userId,
+      savedPolicy.id,
+      {
+        policyNumber: savedPolicy.policyNumber,
+        coverageType: savedPolicy.coverageType,
+        premium: savedPolicy.premium,
+      },
+    );
+
+    return savedPolicy;
+  }
+
+  /**
+   * Transitions a policy to a new status with validation.
+   * Emits domain events for notification handling.
+   */
+  async transitionPolicy(
+    policyId: string,
+    action: PolicyTransitionAction,
+    userId: string,
+    userRoles: string[],
+    reason?: string,
+  ): Promise<Policy> {
+    const policy = await this.getPolicy(policyId);
+
+    // Execute transition with full validation
+    const { auditEntry, stateChangeEvent } =
+      this.stateMachine.executeTransition(
+        policy.status,
+        action,
+        userId,
+        userRoles,
+        policyId,
+        reason,
+      );
+
+    // Update policy status
+    policy.status = auditEntry.toStatus;
+    await this.policyRepository.save(policy);
+
+    // Record audit trail
+    this.auditService.recordAuditEntry(auditEntry);
+    this.auditService.publishStateChangeEvent(stateChangeEvent);
+
+    // Emit notification events based on the action
+    this.emitPolicyEvent(action, policyId, userId, reason);
+
+    this.logger.log(
+      `Policy ${policyId} transitioned from ${auditEntry.fromStatus} to ${auditEntry.toStatus}`,
+    );
+
     // Invalidate analytics cache
-    await this.cacheManager.del('analytics_dashboard'); 
+    await this.cacheManager.del('analytics_dashboard');
+
     return policy;
   }
 
@@ -43,21 +128,27 @@ export class PolicyService {
     return [];
   }
 
-  async transitionPolicy(id: string, action: any, userId: string, roles: string[], reason?: string) {
-    const policy = await this.getPolicy(id);
-    const transition = this.stateMachine.executeTransition(
-      policy.status,
-      action,
-      roles,
-      reason,
-    );
+  private emitPolicyEvent(action: PolicyTransitionAction, policyId: string, userId: string, reason?: string) {
+    let event: any;
 
-    policy.status = transition.to;
-    await this.policyRepository.save(policy);
-    
-    // Invalidate cache on status change
-    await this.cacheManager.del('analytics_dashboard');
-    return policy;
+    switch (action) {
+      case PolicyTransitionAction.ISSUE:
+        event = new PolicyIssuedEvent(policyId, userId);
+        break;
+      case PolicyTransitionAction.RENEW:
+        event = new PolicyRenewedEvent(policyId, userId);
+        break;
+      case PolicyTransitionAction.EXPIRE:
+        event = new PolicyExpiredEvent(policyId, 'system');
+        break;
+      case PolicyTransitionAction.CANCEL:
+        event = new PolicyCancelledEvent(policyId, userId, reason);
+        break;
+    }
+
+    if (event) {
+      this.eventEmitter.emit(event.constructor.name, event);
+    }
   }
   // ... existing code ...
   // PASTE HERE (Inside the class)
