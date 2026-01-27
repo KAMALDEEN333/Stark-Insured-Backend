@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Repository, MoreThan, IsNull } from 'typeorm';
+import { Repository, MoreThan, IsNull, MoreThan, IsNull } from 'typeorm'; // <--- Added MoreThan, IsNull
 import { Claim } from '../entities/claim.entity';
 import { DuplicateClaimCheck } from '../entities/duplicate-claim-check.entity';
-import { InjectRepository } from '@nestjs/typeorm';
 
 @Injectable()
 export class DuplicateDetectionService {
@@ -11,6 +10,7 @@ export class DuplicateDetectionService {
   constructor(
     @InjectRepository(Claim)
     private claimRepository: Repository<Claim>,
+    @InjectRepository(DuplicateClaimCheck)
     @InjectRepository(DuplicateClaimCheck)
     private duplicateCheckRepository: Repository<DuplicateClaimCheck>,
   ) {}
@@ -33,34 +33,19 @@ export class DuplicateDetectionService {
       incidentDate,
       claimAmount,
     );
-    if (amountDuplicate) {
-      this.logger.warn(
-        `Amount match duplicate detected: claim ${amountDuplicate.duplicateClaimId} matches ${claimAmount}`,
-      );
-      return amountDuplicate;
-    }
+    if (amountDuplicate) return amountDuplicate;
 
     const descriptionDuplicate = await this.checkDescriptionSimilarity(
       policyId,
       description,
     );
-    if (descriptionDuplicate) {
-      this.logger.warn(
-        `Description similarity duplicate detected: claim ${descriptionDuplicate.duplicateClaimId}`,
-      );
-      return descriptionDuplicate;
-    }
+    if (descriptionDuplicate) return descriptionDuplicate;
 
     const temporalDuplicate = await this.checkTemporalProximity(
       policyId,
       claimAmount,
     );
-    if (temporalDuplicate) {
-      this.logger.warn(
-        `Temporal proximity duplicate detected: claim ${temporalDuplicate.duplicateClaimId}`,
-      );
-      return temporalDuplicate;
-    }
+    if (temporalDuplicate) return temporalDuplicate;
 
     return null;
   }
@@ -146,6 +131,7 @@ export class DuplicateDetectionService {
     const recentClaim = await this.claimRepository.findOne({
       where: {
         policyId,
+        // FIX 1: Use MoreThan() operator instead of raw function
         createdAt: MoreThan(twentyFourHoursAgo),
       },
       order: { createdAt: 'DESC' },
@@ -179,7 +165,6 @@ export class DuplicateDetectionService {
     for (let k = 0; k <= s1.length; k++) costs[k] = k;
 
     for (let i = 1; i <= s2.length; i++) {
-      costs[0] = i;
       let nw = i - 1;
       for (let j = 1; j <= s1.length; j++) {
         const cj = Math.min(
@@ -230,6 +215,7 @@ export class DuplicateDetectionService {
   async getUnresolvedDuplicates(): Promise<DuplicateClaimCheck[]> {
     return this.duplicateCheckRepository.find({
       where: {
+        // FIX 2: Use IsNull() operator instead of null
         resolvedAt: IsNull(),
         isFalsePositive: false,
       },

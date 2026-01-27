@@ -6,6 +6,8 @@ import { Vote } from './entities/vote.entity';
 import { User } from '../users/entities/user.entity';
 import { ProposalStatus } from './enums/proposal-status.enum';
 import { VoteType } from './enums/vote-type.enum';
+import { AuditService } from '../audit/services/audit.service';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum';
 import {
   CreateProposalDto,
   CastVoteDto,
@@ -36,6 +38,7 @@ export class DaoService {
     private readonly featureFlags: FeatureFlagService,
     private readonly daoLegacy: DaoLegacyService,
     private readonly daoV2: DaoV2Service,
+    private readonly auditService: AuditService,
   ) {}
 
   async createProposal(
@@ -57,6 +60,17 @@ export class DaoService {
     });
 
     const savedProposal = await this.proposalRepository.save(proposal);
+
+    // Audit log the proposal creation
+    await this.auditService.logAction(
+      AuditActionType.PROPOSAL_SUBMITTED,
+      user.id,
+      savedProposal.id,
+      {
+        title: savedProposal.title,
+        createdById: savedProposal.createdById,
+      },
+    );
 
     return this.toProposalResponse(savedProposal);
   }
@@ -127,7 +141,7 @@ export class DaoService {
     const walletAddress = user.walletAddress;
 
     // Use a transaction with pessimistic locking to prevent race conditions
-    return this.dataSource.transaction(async manager => {
+    return this.dataSource.transaction(async (manager) => {
       // Lock the proposal row to prevent concurrent modifications
       const proposal = await manager.findOne(Proposal, {
         where: { id: proposalId },
@@ -169,7 +183,20 @@ export class DaoService {
         voteType: castVoteDto.voteType,
       });
 
-      return manager.save(vote);
+      const savedVote = await manager.save(vote);
+
+      // Audit log the vote casting
+      await this.auditService.logAction(
+        AuditActionType.VOTE_CAST,
+        user.id,
+        proposalId,
+        {
+          voteType: savedVote.voteType,
+          walletAddress: savedVote.walletAddress,
+        },
+      );
+
+      return savedVote;
     });
   }
 
@@ -280,6 +307,37 @@ export class DaoService {
       createdById: proposal.createdById,
       createdAt: proposal.createdAt,
       updatedAt: proposal.updatedAt,
+    };
+  }
+
+  /**
+   * Retrieves all votes cast by a specific wallet address.
+   * Used by the Dashboard to show user activity.
+   */
+  async getVotingHistory(walletAddress: string): Promise<Vote[]> {
+    return this.voteRepository.find({
+      where: { walletAddress },
+      order: { createdAt: 'DESC' }, // Show most recent votes first
+    });
+  }
+
+  // 👇 THIS IS THE MISSING METHOD THAT DASHBOARD NEEDS 👇
+  async getUserVotingStats(
+    walletAddress: string,
+  ): Promise<{ activeProposals: number; userVotes: number }> {
+    // 1. Get count of all active proposals
+    const activeProposalsCount = await this.proposalRepository.count({
+      where: { status: ProposalStatus.ACTIVE },
+    });
+
+    // 2. Get count of votes cast by this specific wallet
+    const userVotesCount = await this.voteRepository.count({
+      where: { walletAddress },
+    });
+
+    return {
+      activeProposals: activeProposalsCount,
+      userVotes: userVotesCount,
     };
   }
 }

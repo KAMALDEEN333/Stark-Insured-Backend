@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { QueueService } from '../../modules/queue/queue.service';
-import { AuditLogJobData } from '../../modules/queue/interfaces/audit-log-job.interface';
+import { Injectable } from '@nestjs/common';
+// FIX: Use ../../ (Two dots) to get to src
+import { QueueService } from '../../modules/../modules/queue/queue.service';
+import { AuditLogJobData } from '../../modules/../modules/queue/interfaces/audit-log-job.interface';
 
 @Injectable()
 export class AuditLogService {
@@ -76,7 +77,7 @@ export class AuditLogService {
     } catch (error) {
       this.logger.error(
         `Failed to queue audit log for policy ${policyId}`,
-        error.stack,
+        error,
       );
       // Don't throw - audit logging should not block main operations
     }
@@ -111,9 +112,8 @@ export class AuditLogService {
     } catch (error) {
       this.logger.error(
         `Failed to queue audit log for ${entity} ${entityId}`,
-        error.stack,
+        error,
       );
-      // Don't throw - audit logging should not block main operations
     }
   }
 }
